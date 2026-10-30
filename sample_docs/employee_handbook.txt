@@ -1,0 +1,45 @@
+NORTHWIND ANALYTICS - EMPLOYEE HANDBOOK (SAMPLE DATA, FICTIONAL COMPANY)
+Version 3.2, effective 1 April 2026
+
+1. WORKING HOURS
+Standard working hours are 9:30 to 18:00, Monday to Friday, with a one-hour lunch break.
+Core collaboration hours are 11:00 to 16:00; meetings should be scheduled within this window.
+
+2. LEAVE POLICY
+Full-time employees receive 24 days of paid annual leave per calendar year, accrued monthly.
+Up to 5 unused days may be carried over to the next year; carried-over days expire on 31 March.
+Sick leave: 12 days per year. A medical certificate is required for absences longer than 2 consecutive days.
+Parental leave: 26 weeks for the primary caregiver and 4 weeks for the secondary caregiver, fully paid.
+Leave requests must be submitted in the HR portal at least 10 working days in advance, except sick leave.
+
+3. REMOTE WORK
+Employees may work remotely up to 3 days per week with their manager's approval.
+Fully remote arrangements require approval from the department head and HR.
+The company provides a one-time home-office allowance of 500 USD for equipment.
+
+4. TRAVEL AND EXPENSES
+Economy class is mandatory for flights shorter than 6 hours; business class may be booked for longer flights.
+Hotel costs are capped at 220 USD per night in tier-one cities and 150 USD per night in tier-two cities.
+The daily meal allowance during travel is 60 USD.
+Expense claims must be filed within 30 days of the expense with itemised receipts attached.
+Claims above 1,000 USD need approval from the finance controller.
+
+5. INFORMATION SECURITY
+Passwords must be at least 14 characters and rotated every 180 days.
+Multi-factor authentication is mandatory for email, VPN and all customer-data systems.
+Confidential documents must not be stored on personal devices or personal cloud accounts.
+Security incidents must be reported to security@northwind.example within 1 hour of discovery.
+
+5.1 DATA CLASSIFICATION
+Public: may be shared freely. Internal: employees only. Confidential: need-to-know, encrypted at rest.
+Restricted: customer personal data and financial records; access is logged and reviewed quarterly.
+
+6. PERFORMANCE REVIEWS
+Performance reviews take place twice a year, in June and December.
+Ratings use a 5-point scale. Employees rated 4 or above are eligible for the annual bonus pool.
+The annual bonus target is 10% of base salary for individual contributors and 15% for managers.
+
+7. CODE OF CONDUCT
+Harassment or discrimination of any kind is not tolerated and may lead to dismissal.
+Gifts from vendors above 50 USD in value must be declared to the compliance team.
+Conflicts of interest must be disclosed in writing to your manager and compliance.
