@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 
 import groq
@@ -20,6 +21,8 @@ log = logging.getLogger(__name__)
 
 # Groq finish_reason -> the stop reasons the agents understand.
 STOP_REASONS = {"stop": "end_turn", "tool_calls": "tool_use", "length": "max_tokens"}
+# gpt-oss models sometimes cite as 【S1】 or 【S1†L3】; normalise to the [S1] style the app expects.
+_LENTICULAR_CITATION_RE = re.compile(r"【\s*(S\d+)[^】]*】")
 # Model families that accept the reasoning_effort parameter (low / medium / high).
 REASONING_EFFORT_PREFIXES = ("openai/gpt-oss",)
 
@@ -170,7 +173,7 @@ def from_chat_completion(response) -> LLMResponse:
     message = choice.message
     blocks: list = []
     if message.content:
-        blocks.append(TextBlock(message.content))
+        blocks.append(TextBlock(_LENTICULAR_CITATION_RE.sub(r"[\1]", message.content)))
     for call in message.tool_calls or []:
         try:
             args = json.loads(call.function.arguments or "{}")

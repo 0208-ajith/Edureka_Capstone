@@ -70,6 +70,11 @@ def test_text_completion_and_json_parsing():
     assert parse_json(response) == {"intent": "summary"}
 
 
+def test_lenticular_citations_are_normalised():
+    response = from_chat_completion(completion(content="Leave is 24 days【S1】【S2†L4-L6】."))
+    assert response.content[0].text == "Leave is 24 days[S1][S2]."
+
+
 def test_content_filter_raises_refusal():
     with pytest.raises(RefusalError):
         from_chat_completion(completion(finish_reason="content_filter"))
