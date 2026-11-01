@@ -18,16 +18,9 @@ def _env_float(name: str, default: float) -> float:
     return float(value) if value else default
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    value = os.getenv(name)
-    if not value:
-        return default
-    return value.strip().lower() in ("1", "true", "yes", "on")
-
-
 @dataclass(frozen=True)
 class Settings:
-    model: str = "claude-opus-5-5"
+    model: str = "openai/gpt-oss-120b"
     chroma_dir: str = "data/chroma"
     collection: str = "enterprise_docs"
     chunk_size: int = 1000
@@ -38,15 +31,12 @@ class Settings:
     max_file_mb: int = 20
     max_question_chars: int = 2000
     max_agent_steps: int = 6
-    # Server-side refusal fallback: if a safety classifier declines a request,
-    # the API re-runs it on a fallback model instead of failing.
-    enable_fallback: bool = True
 
     @classmethod
     def from_env(cls) -> "Settings":
         defaults = cls()
         return cls(
-            model=os.getenv("CLAUDE_MODEL", defaults.model),
+            model=os.getenv("GROQ_MODEL", defaults.model),
             chroma_dir=os.getenv("CHROMA_DIR", defaults.chroma_dir),
             collection=os.getenv("CHROMA_COLLECTION", defaults.collection),
             chunk_size=_env_int("CHUNK_SIZE", defaults.chunk_size),
@@ -56,5 +46,4 @@ class Settings:
             max_file_mb=_env_int("MAX_FILE_MB", defaults.max_file_mb),
             max_question_chars=_env_int("MAX_QUESTION_CHARS", defaults.max_question_chars),
             max_agent_steps=_env_int("MAX_AGENT_STEPS", defaults.max_agent_steps),
-            enable_fallback=_env_bool("ENABLE_FALLBACK", defaults.enable_fallback),
         )

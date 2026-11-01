@@ -1,4 +1,4 @@
-# Enterprise Document Assistant: Agentic RAG with Claude
+# Enterprise Document Assistant: Agentic RAG on Groq
 
 Capstone project for **Generative AI and ML** (Edureka × Illinois Tech).
 
@@ -29,7 +29,7 @@ flowchart LR
 
 ## Quick start
 
-Requires Python 3.10 or newer and an [Anthropic API key](https://console.anthropic.com/).
+Requires Python 3.10 or newer and an [Groq API key](https://console.groq.com/keys).
 
 ```bash
 git clone https://github.com/0208-ajith/Edureka_Capstone.git
@@ -37,7 +37,7 @@ cd Edureka_Capstone
 python -m venv .venv
 # Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env          # then put your ANTHROPIC_API_KEY in .env
+cp .env.example .env          # then put your GROQ_API_KEY in .env
 streamlit run app.py
 ```
 
@@ -55,13 +55,13 @@ The first ingestion downloads the ~80 MB embedding model once.
 pytest
 ```
 
-The 41 tests cover chunking, all four file loaders, the guardrails, the vector store, and the full agent workflow. The agent tests use a scripted fake LLM, so they need no API key.
+The 47 tests cover chunking, all four file loaders, the guardrails, the vector store, the Groq message translation, and the full agent workflow. The agent tests use a scripted fake LLM, so they need no API key.
 
 ## Docker
 
 ```bash
 docker build -t doc-assistant .
-docker run -p 8501:8501 -e ANTHROPIC_API_KEY=sk-ant-... -v doc-data:/app/data doc-assistant
+docker run -p 8501:8501 -e GROQ_API_KEY=gsk_... -v doc-data:/app/data doc-assistant
 ```
 
 ## Documentation
@@ -84,7 +84,7 @@ docqa/
   chunking.py           Recursive, overlapping text splitter
   vector_store.py       ChromaDB store with local embeddings
   retrieval.py          Relevance-filtered search + citation labels
-  llm.py                Claude client wrapper and error handling
+  llm.py                Groq client wrapper and error handling
   rag.py                Simple RAG pipeline
   agents.py             Planner, Research and Validator agents + orchestrator
   guardrails.py         Input validation and output checks

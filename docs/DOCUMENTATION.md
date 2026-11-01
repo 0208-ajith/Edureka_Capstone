@@ -33,7 +33,7 @@ Each answer cites the passages it relies on (`[S1]`, `[S2]`, ...). The UI shows 
 ### Prerequisites
 
 - Python 3.10 or newer (developed on 3.14; the Docker image uses 3.12)
-- An Anthropic API key with access to `claude-opus-5-5`
+- A Groq API key (create one at https://console.groq.com/keys)
 - About 500 MB of disk space for dependencies and the embedding model
 
 ### Installation
@@ -48,13 +48,13 @@ pip install -r requirements-dev.txt
 copy .env.example .env              # Windows (cp on macOS / Linux)
 ```
 
-Open `.env` and set `ANTHROPIC_API_KEY=sk-ant-...`. If no key is configured, the app asks for one in the sidebar. A key entered there is used for that browser session only.
+Open `.env` and set `GROQ_API_KEY=gsk_...`. If no key is configured, the app asks for one in the sidebar. A key entered there is used for that browser session only.
 
 ### Running
 
 ```bash
 streamlit run app.py     # opens http://localhost:8501
-pytest                   # 41 offline tests, no API key needed
+pytest                   # 47 offline tests, no API key needed
 ```
 
 ### Configuration
@@ -63,7 +63,7 @@ All settings are environment variables with sensible defaults (see `.env.example
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `CLAUDE_MODEL` | `claude-opus-5-5` | LLM used by every agent |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | LLM used by every agent |
 | `CHROMA_DIR` | `data/chroma` | Where the vector database is persisted |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | 1000 / 150 characters | Chunking parameters |
 | `TOP_K` | 5 | Default number of passages per search |
@@ -71,7 +71,6 @@ All settings are environment variables with sensible defaults (see `.env.example
 | `MAX_FILE_MB` | 20 | Upload size limit |
 | `MAX_QUESTION_CHARS` | 2000 | Question length limit |
 | `MAX_AGENT_STEPS` | 6 | Maximum tool-use turns for the Research agent |
-| `ENABLE_FALLBACK` | true | Server-side refusal fallback (see section 5) |
 
 ## 3. Architecture
 
@@ -96,7 +95,7 @@ flowchart TB
         ORCH --> VA[Validator agent]
         RA -- search_documents --> RET[retrieval.py<br/>top-k + relevance threshold]
         RET --> VS
-        PL & RA & VA --> LLM[llm.py → Claude API]
+        PL & RA & VA --> LLM[llm.py → Groq API]
     end
 
     VA --> OUT[Answer + citations + sources + agent trace]
@@ -119,15 +118,15 @@ flowchart TB
 
 ### Answer generation
 
-- **Simple RAG mode** (`rag.py`): retrieve top-k → if nothing is relevant, return a "not found" message *without calling the LLM* → otherwise make one Claude call that answers only from the passages and cites them.
+- **Simple RAG mode** (`rag.py`): retrieve top-k → if nothing is relevant, return a "not found" message *without calling the LLM* → otherwise make one LLM call that answers only from the passages and cites them.
 - **Agentic mode** (`agents.py`): the multi-agent workflow described in section 4.
 
 ### Technology choices
 
 | Component | Choice | Reason |
 |-----------|--------|--------|
-| LLM | Claude Opus 5.5 via the official `anthropic` Python SDK | Strong reasoning and tool use; native structured outputs for the planner and validator |
-| Agent framework | Plain Python tool-use loop on the Claude Messages API | Transparent and easy to test; every step is visible in the trace, with no hidden framework behaviour |
+| LLM | `openai/gpt-oss-120b` on Groq via the official `groq` Python SDK | Fast inference, reliable tool calling, adjustable reasoning effort, and strict JSON-schema structured outputs for the planner and validator |
+| Agent framework | Plain Python tool-use loop on Groq chat completions | Transparent and easy to test; every step is visible in the trace, with no hidden framework behaviour |
 | Vector DB | ChromaDB (persistent) | Embedded, no separate server; metadata filtering; persists to disk |
 | Embeddings | all-MiniLM-L6-v2 (ONNX, via ChromaDB) | Free, local, fast on CPU; no second API key needed |
 | UI | Streamlit | Quick to build upload and chat interfaces; free hosting on Streamlit Community Cloud |
@@ -142,11 +141,11 @@ The `AgentOrchestrator` runs the agents in sequence and records every step in a 
 - **Input:** the question, the list of indexed documents, and recent conversation turns (so follow-up questions resolve correctly).
 - **Output** (JSON enforced by structured outputs): an `intent` (`factual_lookup`, `summary`, `comparison`, `analysis`, `chit_chat`, `out_of_scope`), 1-4 focused `sub_queries`, a short `approach`, and a `direct_response` used for chit-chat or out-of-scope messages.
 - **Effect:** greetings and off-topic requests (for example "write me a poem") get a polite direct reply without any retrieval. Multi-part questions are split into separate searches.
-- Runs at `effort: low`, because planning is a light task.
+- Runs at `reasoning_effort: low`, because planning is a light task.
 
 ### 4.2 Research agent: *retrieve and reason*
 
-- A tool-use loop on the Claude Messages API with two tools:
+- A tool-use loop on Groq chat completions (function calling) with two tools:
   - `search_documents(query, source?, top_k?)`: semantic search, returning labelled passages.
   - `list_documents()`: the indexed documents and their chunk counts.
 - It receives the planner's suggested searches. It decides itself how many searches to run, rephrases when results are off-topic, and can restrict a search to one file.
@@ -187,23 +186,24 @@ Validator: grounded = True, confidence = high, unsupported claims = 0
 | Hallucination: unsupported claims | The validator agent checks every claim against the passages and revises or flags the answer | `ValidatorAgent`, `apply_validation` |
 | Hallucinated citations | Citation labels that don't match a retrieved passage are removed | `guardrails.strip_unknown_citations` |
 | Unsafe output | The validator flags harmful content or unnecessary personal data, and the answer is withheld | `ValidatorAgent` |
-| Model safety refusals | `stop_reason == "refusal"` is detected and reported. The server-side fallback (`fallbacks: "default"`) re-runs a declined request on a fallback model | `llm.ClaudeLLM.create` |
-| API failures | Automatic retries (3) for rate limits, 5xx and network errors. Typed SDK exceptions are mapped to user-friendly messages (invalid key, unknown model, rate limit, connection) | `llm.ClaudeLLM.create` |
+| Model safety refusals | A `content_filter` finish reason is detected and reported as a refusal | `llm.from_chat_completion` |
+| API failures | Automatic retries (3) for rate limits, 5xx and network errors. Typed SDK exceptions are mapped to user-friendly messages (invalid key, unknown model, rate limit, connection) | `llm.GroqLLM.create` |
 | Runaway agent loops | `MAX_AGENT_STEPS` cap, followed by a forced final answer | `ResearchAgent.run` |
 | Malformed tool calls | Tool inputs are validated; errors go back to the model as `is_error` tool results | `ResearchAgent._execute` |
 | Unexpected exceptions | Caught in the UI, logged server-side, and shown as a generic message | `app.py` |
 
 ## 6. Testing
 
-`pytest` runs 41 tests in about 25 seconds. No API key is needed.
+`pytest` runs 47 tests in about 30 seconds. No API key is needed.
 
 - `test_chunking.py`: chunk sizes, overlap, boundary preference, hard splits, metadata and unique IDs.
 - `test_ingestion.py`: TXT (including Windows-1252), CSV (including semicolon-delimited), multi-sheet Excel, image-only and corrupt PDFs, unsupported and empty files.
 - `test_guardrails.py`: question cleaning, injection detection (and no false positive on "previous quarter"), upload limits, citation stripping.
 - `test_vector_store.py`: real ChromaDB with real embeddings — semantic search, source filters, relevance threshold, re-ingestion, deletion, stable labels.
 - `test_agents.py`: the full Planner → Research → Validator workflow with a scripted fake LLM, covering tool results, hallucinated-citation removal, chit-chat short-circuit, the no-evidence path, tool-error recovery, the step limit, validation rules, and both RAG paths.
+- `test_llm.py`: translation between the internal message format and Groq chat messages (tool calls, tool results, malformed tool arguments, refusals, JSON parsing).
 
-The SDK request format (refusal-fallback header, structured-output schema, effort, and replay of tool-use and thinking blocks) was also checked against a mock HTTP transport. The UI was smoke-tested with Streamlit's `AppTest`.
+The Groq request format (model, `reasoning_effort`, strict `json_schema` response format, function tools) and the error mapping were also checked against a mock HTTP transport. The UI was smoke-tested with Streamlit's `AppTest`.
 
 ## 7. Deployment
 
@@ -215,10 +215,10 @@ See section 2. Data persists in `data/chroma/`.
 
 ```bash
 docker build -t doc-assistant .
-docker run -p 8501:8501 -e ANTHROPIC_API_KEY=sk-ant-... -v doc-data:/app/data doc-assistant
+docker run -p 8501:8501 -e GROQ_API_KEY=gsk_... -v doc-data:/app/data doc-assistant
 ```
 
-The image pre-downloads the embedding model at build time and includes a health check on `/_stcore/health`. The named volume keeps the vector store across container restarts. The same image runs on any container platform (Azure Container Apps, AWS App Runner, Google Cloud Run, Render, Railway) with `ANTHROPIC_API_KEY` set as a secret.
+The image pre-downloads the embedding model at build time and includes a health check on `/_stcore/health`. The named volume keeps the vector store across container restarts. The same image runs on any container platform (Azure Container Apps, AWS App Runner, Google Cloud Run, Render, Railway) with `GROQ_API_KEY` set as a secret.
 
 ### 7.3 Streamlit Community Cloud (free)
 
@@ -226,7 +226,7 @@ The image pre-downloads the embedding model at build time and includes a health 
 2. At https://share.streamlit.io, choose **Create app**, then pick the repository, the `main` branch and `app.py`.
 3. Under **Advanced settings → Secrets**, add:
    ```toml
-   ANTHROPIC_API_KEY = "sk-ant-..."
+   GROQ_API_KEY = "gsk_..."
    ```
 4. Deploy. The app reads the key from `st.secrets` automatically.
 
@@ -257,7 +257,7 @@ Streamlit Cloud storage is temporary, so uploaded documents must be re-ingested 
 3. **Preventing answers without evidence.** An LLM will readily answer from its general knowledge. Three layers keep answers grounded: a relevance threshold, a hard "not found" path when no passage clears it, and the Planner's out-of-scope intent. On top of these, the Validator checks every claim.
 4. **Stable citations across multiple searches.** The Research agent can retrieve the same chunk in several searches. `EvidenceSet` deduplicates by chunk ID so each passage keeps one label, and citation labels that don't match a retrieved passage are removed.
 5. **Testing agents deterministically.** LLM output varies between runs, so the agent workflow is tested with a scripted fake LLM that also records each request. The first run of this suite failed because the agent appends to a single message list, so the recorded requests changed after the fact. The fake now snapshots the list on every call.
-6. **Keeping up with API changes.** The current Claude models reject several older request patterns: fixed thinking budgets, forced `tool_choice` (`any`/`tool`) and sampling parameters. The code uses adaptive thinking with `effort`, structured outputs (`output_config.format`) instead of forced tool calls, and `tool_choice: none` only to force the final answer when the step limit is reached.
+6. **Switching LLM providers.** The project was first built on the Anthropic Claude API and later moved to Groq. To keep the change contained, the agents use a small provider-neutral message format (text, tool-use and tool-result blocks), and `llm.py` translates it to and from Groq's OpenAI-style chat format. Groq's strict structured outputs can't be combined with tools, so the Planner and Validator (JSON output) and the Research agent (tools) are kept as separate calls. Only the `gpt-oss` models accept `reasoning_effort`, so it is sent only for them.
 7. **Windows console encoding.** Printing UI messages containing emoji from test scripts raised `UnicodeEncodeError` on the default cp1252 console. The fix is to run with `PYTHONIOENCODING=utf-8`. Text loaders also fall back from UTF-8 to Windows-1252 for files saved by legacy Windows tools.
 
 ## 10. Possible future work

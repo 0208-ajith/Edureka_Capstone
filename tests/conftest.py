@@ -47,7 +47,7 @@ def response(*blocks, stop_reason="end_turn"):
 
 
 class FakeLLM:
-    """Stands in for ClaudeLLM: returns scripted responses and records each request."""
+    """Stands in for GroqLLM: returns scripted responses and records each request."""
 
     def __init__(self, responses):
         self._responses = list(responses)
