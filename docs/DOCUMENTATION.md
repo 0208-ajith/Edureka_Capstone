@@ -54,7 +54,7 @@ Open `.env` and set `GROQ_API_KEY=gsk_...`. If no key is configured, the app ask
 
 ```bash
 streamlit run app.py     # opens http://localhost:8501
-pytest                   # 47 offline tests, no API key needed
+pytest                   # 48 offline tests, no API key needed
 ```
 
 ### Configuration
@@ -149,7 +149,7 @@ The `AgentOrchestrator` runs the agents in sequence and records every step in a 
   - `search_documents(query, source?, top_k?)`: semantic search, returning labelled passages.
   - `list_documents()`: the indexed documents and their chunk counts.
 - It receives the planner's suggested searches. It decides itself how many searches to run, rephrases when results are off-topic, and can restrict a search to one file.
-- Tool inputs are validated: an unknown document name, an empty query or a bad `top_k` is returned to the model as an `is_error` tool result, so it can correct itself.
+- Tool inputs are validated: an unknown document name, an empty query or a bad `top_k` is returned to the model as an `Error: ...` tool result, so it can correct itself.
 - The loop is capped at `MAX_AGENT_STEPS`. When the cap is reached, the agent must answer from the evidence gathered so far (`tool_choice: none`).
 - It writes a concise draft answer that cites passages after each claim.
 
@@ -189,21 +189,23 @@ Validator: grounded = True, confidence = high, unsupported claims = 0
 | Model safety refusals | A `content_filter` finish reason is detected and reported as a refusal | `llm.from_chat_completion` |
 | API failures | Automatic retries (3) for rate limits, 5xx and network errors. Typed SDK exceptions are mapped to user-friendly messages (invalid key, unknown model, rate limit, connection) | `llm.GroqLLM.create` |
 | Runaway agent loops | `MAX_AGENT_STEPS` cap, followed by a forced final answer | `ResearchAgent.run` |
-| Malformed tool calls | Tool inputs are validated; errors go back to the model as `is_error` tool results | `ResearchAgent._execute` |
+| Malformed tool calls | Tool inputs are validated; errors go back to the model as `Error: ...` tool results | `ResearchAgent._execute` |
 | Unexpected exceptions | Caught in the UI, logged server-side, and shown as a generic message | `app.py` |
 
 ## 6. Testing
 
-`pytest` runs 47 tests in about 30 seconds. No API key is needed.
+`pytest` runs 48 tests in about 30 seconds. No API key is needed.
 
 - `test_chunking.py`: chunk sizes, overlap, boundary preference, hard splits, metadata and unique IDs.
 - `test_ingestion.py`: TXT (including Windows-1252), CSV (including semicolon-delimited), multi-sheet Excel, image-only and corrupt PDFs, unsupported and empty files.
 - `test_guardrails.py`: question cleaning, injection detection (and no false positive on "previous quarter"), upload limits, citation stripping.
 - `test_vector_store.py`: real ChromaDB with real embeddings — semantic search, source filters, relevance threshold, re-ingestion, deletion, stable labels.
 - `test_agents.py`: the full Planner → Research → Validator workflow with a scripted fake LLM, covering tool results, hallucinated-citation removal, chit-chat short-circuit, the no-evidence path, tool-error recovery, the step limit, validation rules, and both RAG paths.
-- `test_llm.py`: translation between the internal message format and Groq chat messages (tool calls, tool results, malformed tool arguments, refusals, JSON parsing).
+- `test_llm.py`: translation between the internal message format and Groq chat messages (tool calls, tool results, malformed tool arguments, citation normalisation, refusals, JSON parsing).
 
 The Groq request format (model, `reasoning_effort`, strict `json_schema` response format, function tools) and the error mapping were also checked against a mock HTTP transport. The UI was smoke-tested with Streamlit's `AppTest`.
+
+**Live check on Groq.** With a real Groq key, the full agentic workflow was run on the two sample documents for the question "How many days of annual leave do employees get, and which region had the highest Q4 revenue?". The Planner split it into two searches, the Research agent listed the documents and ran three targeted searches, and the Validator marked the answer grounded with high confidence. The answer gave the correct leave entitlement (24 days, cited) and correctly said the sales data has no Q4 figures, instead of inventing one.
 
 ## 7. Deployment
 
@@ -245,12 +247,13 @@ Streamlit Cloud storage is temporary, so uploaded documents must be re-ingested 
 - **Single shared knowledge base:** there are no user accounts or per-user document permissions. Everyone using the same deployment sees the same documents.
 - **Regex prompt-injection filter:** it catches common phrasings only. The structural defences (tagged passages, validator) are the main protection.
 - **The validator uses the same model family** as the generator, so it can share blind spots. It reduces hallucinations but doesn't eliminate them.
+- **Groq rate limits:** the free tier allows a limited number of requests and tokens per minute. Agentic mode can hit these on long sessions; the app shows a rate-limit message, and Simple RAG mode uses fewer calls.
 - **Latency and cost:** agentic mode makes at least three LLM calls (planner, one or more research turns, validator), so it is slower and costlier than simple RAG mode.
 - **Ephemeral storage** on free hosting tiers (see 7.3).
 
 ## 9. Challenges faced during development
 
-> Items 1-4 are design problems that were solved while building the system. Items 5-7 are issues actually hit during development and testing. Add your own experiences from running the app on real documents here before submitting.
+> Items 1-4 are design problems that were solved while building the system. Items 5-8 are issues actually hit during development and testing. Add your own experiences from running the app on real documents here before submitting.
 
 1. **Making spreadsheets searchable.** A table row such as `North,510,306000` means little to an embedding model on its own. Each row is therefore written as `column: value` pairs so chunks describe themselves. A per-sheet summary section (totals, ranges, distinct categories) gives aggregate questions something to retrieve.
 2. **Choosing a chunk size.** Small chunks lose context, and large chunks dilute similarity scores. The splitter targets about 1000 characters, breaks first on paragraph and line boundaries so sentences and table rows stay whole, and aligns the overlap to word boundaries.
@@ -259,6 +262,7 @@ Streamlit Cloud storage is temporary, so uploaded documents must be re-ingested 
 5. **Testing agents deterministically.** LLM output varies between runs, so the agent workflow is tested with a scripted fake LLM that also records each request. The first run of this suite failed because the agent appends to a single message list, so the recorded requests changed after the fact. The fake now snapshots the list on every call.
 6. **Switching LLM providers.** The project was first built on the Anthropic Claude API and later moved to Groq. To keep the change contained, the agents use a small provider-neutral message format (text, tool-use and tool-result blocks), and `llm.py` translates it to and from Groq's OpenAI-style chat format. Groq's strict structured outputs can't be combined with tools, so the Planner and Validator (JSON output) and the Research agent (tools) are kept as separate calls. Only the `gpt-oss` models accept `reasoning_effort`, so it is sent only for them.
 7. **Windows console encoding.** Printing UI messages containing emoji from test scripts raised `UnicodeEncodeError` on the default cp1252 console. The fix is to run with `PYTHONIOENCODING=utf-8`. Text loaders also fall back from UTF-8 to Windows-1252 for files saved by legacy Windows tools.
+8. **Model-specific citation format.** In the first live run on Groq, `gpt-oss-120b` cited passages as `【S1】` instead of the requested `[S1]`. The citation filter and source matching didn't recognise these, so the Sources panel listed every retrieved passage instead of only the cited ones. `llm.py` now normalises `【S1】` and `【S1†L3】` to `[S1]` when reading the response, with a unit test.
 
 ## 10. Possible future work
 

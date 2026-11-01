@@ -55,7 +55,7 @@ The first ingestion downloads the ~80 MB embedding model once.
 pytest
 ```
 
-The 47 tests cover chunking, all four file loaders, the guardrails, the vector store, the Groq message translation, and the full agent workflow. The agent tests use a scripted fake LLM, so they need no API key.
+The 48 tests cover chunking, all four file loaders, the guardrails, the vector store, the Groq message translation, and the full agent workflow. The agent tests use a scripted fake LLM, so they need no API key.
 
 ## Docker
 
